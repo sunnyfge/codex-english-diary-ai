@@ -17,7 +17,8 @@ function utter(text,language,generation,onEnd){
  if(!('speechSynthesis'in window)){toast('此瀏覽器不支援朗讀，請使用 Chrome、Edge 或 Safari。');stopSpeech();return}
  const u=new SpeechSynthesisUtterance(text);u.lang=language;u.rate=Number($('#rate').value);
  const available=speechSynthesis.getVoices();u.voice=language.startsWith('en')?(voiceChoices[$('#voice').value]||null):(available.find(v=>v.lang.startsWith('es')&&/Mónica|Monica|Paulina|Jorge|Diego/i.test(v.name))||available.find(v=>v.lang===language&&!/Eddy|Rocko|Grand|Whisper/i.test(v.name))||null);
- if(!u.voice){toast(language.startsWith('en')?'此裝置沒有可用的美式語音，請在系統設定加入美式英文語音。':'裝置沒有西班牙文語音，請先在系統設定安裝。');stopSpeech();return}
+ if(!u.voice){toast(language.startsWith('en')?'此裝置沒有所選的英文語音，請在系統語音設定加入對應語音。':'裝置沒有西班牙文語音，請先在系統設定安裝。');stopSpeech();return}
+ u.lang=u.voice.lang;
  u.onend=()=>{if(generation===speechGeneration)onEnd()};
  u.onerror=e=>{if(generation!==speechGeneration)return;stopSpeech();if(!['interrupted','canceled'].includes(e.error))toast('朗讀失敗，請重試或確認裝置語音設定。')};
  speechSynthesis.speak(u);
@@ -41,11 +42,21 @@ function startShadow(mode){
 function loadVoices(){
  if(!('speechSynthesis'in window))return;
  const selected=$('#voice').value||'female';
- voices=speechSynthesis.getVoices().filter(v=>/^en[-_]US$/i.test(v.lang));
- const pick=patterns=>{for(const pattern of patterns){const found=voices.find(v=>pattern.test(v.name));if(found)return found}return null};
- voiceChoices={female:pick([/Samantha/i,/Ava/i,/Allison/i,/Joanna/i,/Zoe/i,/Aria/i,/Jenny/i,/Zira/i,/Google US English/i,/female/i]),male:pick([/^Alex$/i,/Tom/i,/Aaron/i,/Nathan/i,/Evan/i,/Reed/i,/Guy/i,/Davis/i,/David/i,/Mark/i,/\bmale\b/i]),child:pick([/^Junior$/i,/child/i])};
- const labels={female:'美式女聲',male:'美式男聲',child:'美式小孩聲'};
- $('#voice').innerHTML=Object.entries(labels).map(([key,label])=>`<option value="${key}" ${voiceChoices[key]?'':'disabled'}>${label}${voiceChoices[key]?'':'（此裝置未提供）'}</option>`).join('');
+ voices=speechSynthesis.getVoices().filter(v=>/^en[-_]/i.test(v.lang));
+ const pick=(locale,patterns)=>{const pool=voices.filter(v=>locale.test(v.lang));for(const pattern of patterns){const found=pool.find(v=>pattern.test(v.name));if(found)return found}return null};
+ const us=/^en[-_]US$/i,uk=/^en[-_]GB$/i,asia=/^en[-_](IN|SG|HK|PH)$/i;
+ voiceChoices={
+  female:pick(us,[/Samantha/i,/Ava/i,/Allison/i,/Joanna/i,/Zoe/i,/Aria/i,/Jenny/i,/Zira/i,/Google US English/i,/female/i]),
+  male:pick(us,[/^Alex$/i,/Tom/i,/Aaron/i,/Nathan/i,/Evan/i,/Reed/i,/Guy/i,/Davis/i,/David/i,/Mark/i,/\bmale\b/i]),
+  child:pick(us,[/^Junior$/i,/child/i]),
+  britishMale:pick(uk,[/Daniel/i,/Oliver/i,/George/i,/Ryan/i,/Thomas/i,/Google UK English Male/i,/\bmale\b/i]),
+  britishFemale:pick(uk,[/Serena/i,/Kate/i,/Stephanie/i,/Sonia/i,/Libby/i,/Hazel/i,/Susan/i,/Google UK English Female/i,/female/i]),
+  asianMale:pick(asia,[/Rishi/i,/Ravi/i,/Prabhat/i,/Valluvar/i,/Wayne/i,/Sam/i,/Connor/i,/\bmale\b/i]),
+  asianFemale:pick(asia,[/Veena/i,/Heera/i,/Neerja/i,/Aditi/i,/Kajal/i,/Ananya/i,/Alisha/i,/Sangeeta/i,/Luna/i,/Yan/i,/Rosa/i,/female/i])
+ };
+ const labels={female:'美式女聲',male:'美式男聲',child:'美式小孩聲',britishMale:'英式男聲',britishFemale:'英式女聲',asianMale:'亞洲英語男聲',asianFemale:'亞洲英語女聲'};
+ const regions={IN:'印度',SG:'新加坡',HK:'香港',PH:'菲律賓'};
+ $('#voice').innerHTML=Object.entries(labels).map(([key,label])=>{const voice=voiceChoices[key],region=voice&&key.startsWith('asian')?regions[voice.lang.split(/[-_]/)[1].toUpperCase()]:'';return `<option value="${key}" ${voice?'':'disabled'}>${label}${region?' · '+region:''}${voice?'':'（此裝置未提供）'}</option>`}).join('');
  $('#voice').value=voiceChoices[selected]?selected:Object.keys(voiceChoices).find(key=>voiceChoices[key])||'female';
  $('#voice').disabled=!Object.values(voiceChoices).some(Boolean);
 }
