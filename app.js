@@ -64,9 +64,11 @@ function loadVoices(){
  };
  const labels={female:'美式女聲',male:'美式男聲 1',male2:'美式男聲 2',child:'美式小孩聲',britishMale:'英式男聲',britishFemale:'英式女聲',asianMale:'亞洲英語男聲',asianFemale:'亞洲英語女聲'};
  const regions={IN:'印度',SG:'新加坡',HK:'香港',PH:'菲律賓'};
- $('#voice').innerHTML=Object.entries(labels).map(([key,label])=>{const voice=voiceChoices[key],region=voice&&key.startsWith('asian')?regions[voice.lang.split(/[-_]/)[1].toUpperCase()]:'';return `<option value="${key}" ${voice?'':'disabled'}>${label}${voice&&(key==='male'||key==='male2')?' · '+escapeHTML(voice.name):''}${region?' · '+region:''}${voice?'':'（此裝置未提供）'}</option>`}).join('');
+ $('#voice').innerHTML=Object.entries(labels).filter(([key])=>voiceChoices[key]).map(([key,label])=>{const voice=voiceChoices[key],region=voice&&key.startsWith('asian')?regions[voice.lang.split(/[-_]/)[1].toUpperCase()]:'';return `<option value="${key}" ${voice?'':'disabled'}>${label}${voice&&(key==='male'||key==='male2')?' · '+escapeHTML(voice.name):''}${region?' · '+region:''}${voice?'':'（此裝置未提供）'}</option>`}).join('');
  $('#voice').value=voiceChoices[selected]?selected:Object.keys(voiceChoices).find(key=>voiceChoices[key])||'female';
  $('#voice').disabled=!Object.values(voiceChoices).some(Boolean);
+ if($('#voice').disabled)$('#voice').innerHTML='<option value="">此裝置沒有可用的英文語音</option>';
+ $('#preview-voice').disabled=$('#voice').disabled;
 }
 
 loadVoices();if('speechSynthesis'in window)speechSynthesis.addEventListener('voiceschanged',loadVoices);
