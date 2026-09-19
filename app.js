@@ -61,7 +61,39 @@ async function lookup(word){word=word.trim().toLowerCase();if(!/^[a-z][a-z '-]*$
 function renderWord(entry,curated){const meanings=entry.meanings||[];const meaning=meanings.find(m=>m.definitions?.length)||{};const definition=meaning.definitions?.[0];const ex=meanings.flatMap(m=>m.definitions||[]).find(d=>d.example)?.example;const phonetic=entry.phonetic||entry.phonetics?.find(p=>p.text)?.text||'音標暫無資料';$('#word-result').innerHTML=`<div class="word-heading"><h2>${escapeHTML(entry.word)}</h2><button class="audio-icon" id="say-word" aria-label="朗讀單字">♪</button></div><p class="phonetic">${escapeHTML(phonetic)}</p><div class="definition"><span class="pos">${escapeHTML(meaning.partOfSpeech||'word')}</span><p>${escapeHTML(definition?.definition||'目前沒有定義。')}</p></div><div class="label-row"><span class="section-label">IN A SENTENCE · 例句</span>${ex?'<button class="text-button" id="say-example">聽例句 ♪</button>':''}</div>${ex?`<blockquote class="example">${escapeHTML(ex)}${entry.translation?`<small>${escapeHTML(entry.translation)}</small>`:''}</blockquote><div class="label-row"><span></span><button class="text-button" id="send-example">用這句練習跟讀 ↗</button></div>`:'<p class="muted">字典沒有提供此字的例句。寫下你的句子，練習朗讀。</p><label for="own-example">我的造句</label><textarea id="own-example" rows="2" maxlength="500"></textarea><button class="secondary" id="use-own">用我的句子練習</button>'}<div class="practice-card" id="word-practice"></div><p class="source">${curated?'精選教學內容 · 內建練習單字':`定義與例句：<a href="https://en.wiktionary.org/wiki/${encodeURIComponent(entry.word)}" target="_blank" rel="noopener">Wiktionary</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA</a>`} · 發音使用裝置英文語音</p>`;$('#say-word').onclick=()=>speak(entry.word);if(ex){$('#say-example').onclick=()=>speak(ex);$('#send-example').onclick=()=>sendToShadow(ex);makeQuestion($('#word-practice'),ex,entry.word)}else{$('#use-own').onclick=()=>{const value=$('#own-example').value.trim();if(!value){toast('先寫一句英文吧。');return}sendToShadow(value)};$('#word-practice').innerHTML=`<div class="practice-head"><span>?</span>YOUR TURN · 換你說說看</div><p>How would you use “${escapeHTML(entry.word)}” in a sentence about your day?</p>`}}
 function makeQuestion(container,sentence,preferred){const words=sentence.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g)||[];const answer=words.find(w=>w.toLowerCase()===preferred?.toLowerCase())||words.filter(w=>w.length>4).sort((a,b)=>b.length-a.length)[0]||words[0];if(!answer){container.innerHTML='<p>請使用包含英文單字的句子。</p>';return}const regex=new RegExp('\\b'+answer.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i');const question=sentence.replace(regex,'________');container.innerHTML=`<div class="practice-head"><span>?</span>YOUR TURN · 記得這一句嗎？</div><p>${escapeHTML(question)}</p><form class="answer-row"><input aria-label="填入缺少的英文單字" placeholder="填入缺少的單字" autocomplete="off" required><button class="secondary" type="submit">檢查答案</button></form><p class="feedback" role="status"></p><div class="label-row"><button class="text-button hint" type="button">給我提示</button><button class="text-button reveal" type="button">看答案</button></div>`;const input=container.querySelector('input'),feedback=container.querySelector('.feedback');container.querySelector('form').onsubmit=e=>{e.preventDefault();const correct=input.value.trim().toLowerCase()===answer.toLowerCase();feedback.textContent=correct?'答對了！再把完整句子念一遍。':'再試一次。想想原本的句子用了哪個單字。'};container.querySelector('.hint').onclick=()=>{feedback.textContent=`提示：以 ${answer[0]} 開頭，共 ${answer.length} 個字元。`};container.querySelector('.reveal').onclick=()=>{feedback.textContent='答案：'+answer}}
 $('#lookup').onsubmit=e=>{e.preventDefault();lookup($('#word').value)};document.querySelectorAll('[data-word]').forEach(b=>b.onclick=()=>lookup(b.dataset.word));renderWord(demo.curious,true);
-function splitSentences(text){const clean=text.trim();if(!clean)return[];if(typeof Intl.Segmenter==='function'){const segmenter=new Intl.Segmenter('en',{granularity:'sentence'});return [...segmenter.segment(clean)].map(x=>x.segment.trim()).filter(Boolean)}return clean.match(/[^.!?\n]+(?:[.!?]+|$)/g)?.map(s=>s.trim()).filter(Boolean)||[]}
+// Keep short sentences intact; divide long sentences into balanced speaking phrases.
+function splitLongSentence(sentence){
+ const words=[...sentence.matchAll(/\S+/g)];
+ const count=words.length;
+ if(count<=24)return[sentence];
+ const parts=count<=40?2:3,target=count/parts,minWords=6;
+ const boundaryCost=i=>{
+  const previous=words[i-1][0],next=words[i][0].toLowerCase().replace(/^["“‘(]+/,'');
+  if(/[;:]["”’)]?$/.test(previous))return 0;
+  if(/[,—–]["”’)]?$/.test(previous))return 1;
+  if(/^(and|but|or|so|because|although|while|when|which|where|who|that|if|unless|until|after|before)$/.test(next))return 2;
+  return 9;
+ };
+ const memo=new Map();
+ function choose(start,remaining){
+  if(remaining===1)return{cost:Math.pow((count-start-target)/target,2)*12,cuts:[]};
+  const key=start+':'+remaining;if(memo.has(key))return memo.get(key);
+  let best={cost:Infinity,cuts:[]};
+  for(let end=start+minWords;end<=count-minWords*(remaining-1);end++){
+   const length=end-start;if(length>target*1.65||length<target*.5)continue;
+   const tail=choose(end,remaining-1),cost=Math.pow((length-target)/target,2)*12+boundaryCost(end)+tail.cost;
+   if(cost<best.cost)best={cost,cuts:[end,...tail.cuts]};
+  }
+  memo.set(key,best);return best;
+ }
+ const cuts=choose(0,parts).cuts;
+ let start=0;return[...cuts.map(i=>words[i].index),sentence.length].map(end=>{const phrase=sentence.slice(start,end).trim();start=end;return phrase}).filter(Boolean);
+}
+function splitSentences(text){
+ const clean=text.trim();if(!clean)return[];
+ const sentences=typeof Intl.Segmenter==='function'?[...new Intl.Segmenter('en',{granularity:'sentence'}).segment(clean)].map(x=>x.segment.trim()).filter(Boolean):clean.match(/[^.!?\n]+(?:[.!?]+|$)/g)?.map(s=>s.trim()).filter(Boolean)||[];
+ return sentences.flatMap(splitLongSentence);
+}
 function loadSentences(){const next=splitSentences($('#shadow-input').value);if(!next.length){toast('請先輸入想跟讀的英文句子。');return}if(next.length>50){toast('每次最多練習 50 句，請縮短內容。');return}if(!/[a-z]/i.test(next.join(' '))){toast('請輸入英文句子。');return}stopSpeech();stopRecording();sentences=next;activeSentence=0;renderSentences()}
 function selectSentence(index){if(index<0||index>=sentences.length)return;stopSpeech();stopRecording();activeSentence=index;renderSentences()}
 function renderSentences(){
