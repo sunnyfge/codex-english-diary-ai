@@ -45,18 +45,26 @@ function loadVoices(){
  voices=speechSynthesis.getVoices().filter(v=>/^en[-_]/i.test(v.lang));
  const pick=(locale,patterns)=>{const pool=voices.filter(v=>locale.test(v.lang));for(const pattern of patterns){const found=pool.find(v=>pattern.test(v.name));if(found)return found}return null};
  const us=/^en[-_]US$/i,uk=/^en[-_]GB$/i,asia=/^en[-_](IN|SG|HK|PH)$/i;
+ // Prefer enhanced voices, then offer two different speakers rather than two versions of one voice.
+ const maleNames=[/\bGuy\b/i,/\bDavis\b/i,/\bAndrew\b/i,/\bBrian\b/i,/\bEvan\b/i,/\bNathan\b/i,/\bTom\b/i,/\bAaron\b/i,/\bAlex\b/i,/\bDavid\b/i,/\bMark\b/i,/\bReed\b/i,/\bmale\b/i];
+ const quality=v=>/natural|neural|premium/i.test(v.name)?2:/enhanced/i.test(v.name)?1:0;
+ const candidates=voices.filter(v=>us.test(v.lang)&&maleNames.some(pattern=>pattern.test(v.name))).sort((a,b)=>quality(b)-quality(a)||maleNames.findIndex(p=>p.test(a.name))-maleNames.findIndex(p=>p.test(b.name)));
+ const speaker=v=>maleNames.findIndex(p=>p.test(v.name));
+ const maleOne=candidates[0]||null;
+ const maleTwo=candidates.find(v=>maleOne&&speaker(v)!==speaker(maleOne))||null;
  voiceChoices={
   female:pick(us,[/Samantha/i,/Ava/i,/Allison/i,/Joanna/i,/Zoe/i,/Aria/i,/Jenny/i,/Zira/i,/Google US English/i,/female/i]),
-  male:pick(us,[/^Alex$/i,/Tom/i,/Aaron/i,/Nathan/i,/Evan/i,/Reed/i,/Guy/i,/Davis/i,/David/i,/Mark/i,/\bmale\b/i]),
+  male:maleOne,
+  male2:maleTwo,
   child:pick(us,[/^Junior$/i,/child/i]),
   britishMale:pick(uk,[/Daniel/i,/Oliver/i,/George/i,/Ryan/i,/Thomas/i,/Google UK English Male/i,/\bmale\b/i]),
   britishFemale:pick(uk,[/Serena/i,/Kate/i,/Stephanie/i,/Sonia/i,/Libby/i,/Hazel/i,/Susan/i,/Google UK English Female/i,/female/i]),
   asianMale:pick(asia,[/Rishi/i,/Ravi/i,/Prabhat/i,/Valluvar/i,/Wayne/i,/Sam/i,/Connor/i,/\bmale\b/i]),
   asianFemale:pick(asia,[/Veena/i,/Heera/i,/Neerja/i,/Aditi/i,/Kajal/i,/Ananya/i,/Alisha/i,/Sangeeta/i,/Luna/i,/Yan/i,/Rosa/i,/female/i])
  };
- const labels={female:'美式女聲',male:'美式男聲',child:'美式小孩聲',britishMale:'英式男聲',britishFemale:'英式女聲',asianMale:'亞洲英語男聲',asianFemale:'亞洲英語女聲'};
+ const labels={female:'美式女聲',male:'美式男聲 1',male2:'美式男聲 2',child:'美式小孩聲',britishMale:'英式男聲',britishFemale:'英式女聲',asianMale:'亞洲英語男聲',asianFemale:'亞洲英語女聲'};
  const regions={IN:'印度',SG:'新加坡',HK:'香港',PH:'菲律賓'};
- $('#voice').innerHTML=Object.entries(labels).map(([key,label])=>{const voice=voiceChoices[key],region=voice&&key.startsWith('asian')?regions[voice.lang.split(/[-_]/)[1].toUpperCase()]:'';return `<option value="${key}" ${voice?'':'disabled'}>${label}${region?' · '+region:''}${voice?'':'（此裝置未提供）'}</option>`}).join('');
+ $('#voice').innerHTML=Object.entries(labels).map(([key,label])=>{const voice=voiceChoices[key],region=voice&&key.startsWith('asian')?regions[voice.lang.split(/[-_]/)[1].toUpperCase()]:'';return `<option value="${key}" ${voice?'':'disabled'}>${label}${voice&&(key==='male'||key==='male2')?' · '+escapeHTML(voice.name):''}${region?' · '+region:''}${voice?'':'（此裝置未提供）'}</option>`}).join('');
  $('#voice').value=voiceChoices[selected]?selected:Object.keys(voiceChoices).find(key=>voiceChoices[key])||'female';
  $('#voice').disabled=!Object.values(voiceChoices).some(Boolean);
 }
